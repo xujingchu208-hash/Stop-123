@@ -1,0 +1,540 @@
+import { useState, useEffect, useCallback } from "react";
+
+/**
+ * 全30题答案核查说明：
+ * Q1:  小さい子ども（が）パソコン（を）使わせない → が/を ✅
+ * Q2:  弟（は）公園（で）自由（に）遊ばせます → は/で/に ✅（修正：自由に遊ぶ固定搭配）
+ * Q3:  店（に）招き猫（を）かざる → に/を ✅
+ * Q4:  両親（に）感謝している → に ✅
+ * Q5:  成人式という（の）（は）20歳になったこと（を）祝う行事 → の/は/を ✅
+ * Q6:  学校（に）自転車（で）通う → に/で ✅
+ * Q7:  友達（に）プレゼント（を）あげる → に/を ✅
+ * Q8:  この本（は）面白い（と）思う → は/と ✅
+ * Q9:  先生（に）質問（を）する → に/を ✅（改为する，更自然）
+ * Q10: 日本語（の）勉強（は）難しい → の/は ✅
+ * Q11: 駅（で）降りて、右（に）曲がる → で/に ✅
+ * Q12: この映画（を）見たこと（が）ある → を/が ✅
+ * Q13: 子ども（が）外（で）元気（に）遊ぶ → が/で/に ✅
+ * Q14: 彼女（は）歌（が）上手 → は/が ✅
+ * Q15: 東京（から）大阪（に）新幹線（で）行く → から/に/で ✅
+ * Q16: このケーキ（は）甘すぎて食べられない → は ✅
+ * Q17: 兄（に）パソコン（を）直してもらう → に/を ✅
+ * Q18: 日曜日（に）図書館（で）本（を）借りる → に/で/を ✅
+ * Q19: 空（を）鳥（が）飛ぶ → を/が ✅
+ * Q20: 日本（に）来てから、毎日（が）楽しいです → に/が ✅（替换Q20，原题有语法争议）
+ * Q21: 母（に）料理（を）教わりました → に/を ✅
+ * Q22: 山田さん（は）背（が）高くて、足（も）長い → は/が/も ✅
+ * Q23: 図書館（では）静か（に）話してください → では/に ✅
+ * Q24: バス（が）来る前（に）準備しておこう → が/に ✅
+ * Q25: 先週（から）ずっと雨（が）続いています → から/が ✅
+ * Q26: 彼（は）医者（に）なりたい（と）思っている → は/に/と ✅
+ * Q27: この問題（は）難しくて、私（に）は解けません → は/に ✅
+ * Q28: 電車（の）中（で）スマホ（を）使う人（が）多い → の/で/を/が ✅
+ * Q29: 海（へ）行く途中（で）コンビニ（に）寄りました → へ/で/に ✅
+ * Q30: 子どもの頃（から）ピアノ（を）習っています → から/を ✅
+ */
+
+const allQuestions = [
+  // ── 来自原试卷（共5题）──
+  {
+    id: 1,
+    parts: ["小さい子ども（", "）パソコン（", "）使わせないほうがいい。"],
+    blanks: ["が", "を"],
+    hint: "小孩是主语用「が」；パソコン是「使わせる」的宾语用「を」",
+  },
+  {
+    id: 2,
+    parts: ["弟（", "）公園（", "）自由（", "）遊ばせます。"],
+    blanks: ["は", "で", "に"],
+    hint: "弟は主题用「は」；公園は动作场所用「で」；自由に遊ぶ是固定副词搭配用「に」",
+  },
+  {
+    id: 3,
+    parts: ["店（", "）招き猫（", "）かざるといいですよ。"],
+    blanks: ["に", "を"],
+    hint: "店に放置/装饰的目标地点用「に」；招き猫是宾语用「を」",
+  },
+  {
+    id: 4,
+    parts: ["ここまで育ててくれた両親（", "）感謝しています。"],
+    blanks: ["に"],
+    hint: "感謝する的感谢对象用「に」",
+  },
+  {
+    id: 5,
+    parts: ["成人式という（", "）（", "）20歳になったこと（", "）祝う行事です。"],
+    blanks: ["の", "は", "を"],
+    hint: "「という」後的の修饰名词；全句主题用「は」；祝う的宾语用「を」",
+  },
+
+  // ── 扩充题（共25题）──
+  {
+    id: 6,
+    parts: ["毎朝、学校（", "）自転車（", "）通っています。"],
+    blanks: ["に", "で"],
+    hint: "通う的目的地用「に」；自転車は交通手段用「で」",
+  },
+  {
+    id: 7,
+    parts: ["友達（", "）プレゼント（", "）あげました。"],
+    blanks: ["に", "を"],
+    hint: "あげる的给予对象用「に」；プレゼント是宾语用「を」",
+  },
+  {
+    id: 8,
+    parts: ["この本（", "）とても面白い（", "）思います。"],
+    blanks: ["は", "と"],
+    hint: "この本は全句主题用「は」；「と思う」是引用固定搭配",
+  },
+  {
+    id: 9,
+    parts: ["先生（", "）質問（", "）しました。"],
+    blanks: ["に", "を"],
+    hint: "质问的对象用「に」；質問是する的宾语用「を」",
+  },
+  {
+    id: 10,
+    parts: ["日本語（", "）勉強（", "）難しいです。"],
+    blanks: ["の", "は"],
+    hint: "「日本語の勉強」用「の」连接修饰名词；勉強は全句主题用「は」",
+  },
+  {
+    id: 11,
+    parts: ["駅（", "）降りて、右（", "）曲がってください。"],
+    blanks: ["で", "に"],
+    hint: "駅は动作发生场所用「で」；曲がる的方向目标用「に」",
+  },
+  {
+    id: 12,
+    parts: ["この映画（", "）見たこと（", "）ありますか。"],
+    blanks: ["を", "が"],
+    hint: "見る的宾语用「を」；「〜たことがある」经验句型，こと的主语用「が」",
+  },
+  {
+    id: 13,
+    parts: ["子どもたち（", "）外（", "）元気（", "）遊んでいます。"],
+    blanks: ["が", "で", "に"],
+    hint: "子どもたち是主语用「が」；外は场所用「で」；元気に遊ぶ是副词用法用「に」",
+  },
+  {
+    id: 14,
+    parts: ["彼女（", "）歌（", "）上手です。"],
+    blanks: ["は", "が"],
+    hint: "彼女は对比主题用「は」；歌は能力主语（上手的对象）用「が」",
+  },
+  {
+    id: 15,
+    parts: ["東京（", "）大阪（", "）新幹線（", "）行きます。"],
+    blanks: ["から", "に", "で"],
+    hint: "出发点用「から」；目的地用「に」；交通手段用「で」",
+  },
+  {
+    id: 16,
+    parts: ["このケーキ（", "）甘すぎて、食べられません。"],
+    blanks: ["は"],
+    hint: "このケーキは对比/评价主题用「は」",
+  },
+  {
+    id: 17,
+    parts: ["兄（", "）パソコン（", "）直してもらいました。"],
+    blanks: ["に", "を"],
+    hint: "「もらう」的恩惠施与者用「に」；パソコン是修理宾语用「を」",
+  },
+  {
+    id: 18,
+    parts: ["日曜日（", "）図書館（", "）本（", "）借りました。"],
+    blanks: ["に", "で", "を"],
+    hint: "时间点用「に」；动作场所用「で」；借りる的宾语用「を」",
+  },
+  {
+    id: 19,
+    parts: ["空（", "）鳥（", "）飛んでいます。"],
+    blanks: ["を", "が"],
+    hint: "飛ぶ经过的空间路径用「を」；鳥は主语用「が」",
+  },
+  {
+    id: 20,
+    parts: ["日本（", "）来てから、毎日（", "）楽しいです。"],
+    blanks: ["に", "が"],
+    hint: "来日目的地用「に」；毎日は感受的主语用「が」",
+  },
+  {
+    id: 21,
+    parts: ["母（", "）料理（", "）教わりました。"],
+    blanks: ["に", "を"],
+    hint: "「教わる」的学习对象（老师）用「に」；料理是被教的内容宾语用「を」",
+  },
+  {
+    id: 22,
+    parts: ["山田さん（", "）背（", "）高くて、足（", "）長い。"],
+    blanks: ["は", "が", "も"],
+    hint: "山田さん是主题用「は」；背は能力/特征的主语用「が」；足も同样用「も」表追加",
+  },
+  {
+    id: 23,
+    parts: ["図書館（", "）静か（", "）話してください。"],
+    blanks: ["では", "に"],
+    hint: "図書館では表示「在图书馆这种场合」用「では」；静かに是副词用法用「に」",
+  },
+  {
+    id: 24,
+    parts: ["バス（", "）来る前（", "）準備しておこう。"],
+    blanks: ["が", "に"],
+    hint: "バス是主语用「が」；「〜前に」表示在…之前，固定用「に」",
+  },
+  {
+    id: 25,
+    parts: ["先週（", "）ずっと雨（", "）続いています。"],
+    blanks: ["から", "が"],
+    hint: "起点时间用「から」；雨は自然现象的主语用「が」",
+  },
+  {
+    id: 26,
+    parts: ["彼（", "）医者（", "）なりたい（", "）思っている。"],
+    blanks: ["は", "に", "と"],
+    hint: "彼は主题用「は」；「〜になる」变化目标用「に」；「と思う」引用固定搭配",
+  },
+  {
+    id: 27,
+    parts: ["この問題（", "）難しくて、私（", "）は解けません。"],
+    blanks: ["は", "に"],
+    hint: "この問題は评价主题用「は」；「私には解けない」表示对我来说，可能性的对象用「に」",
+  },
+  {
+    id: 28,
+    parts: ["電車（", "）中（", "）スマホ（", "）使う人（", "）多い。"],
+    blanks: ["の", "で", "を", "が"],
+    hint: "「電車の中」所属用「の」；中は场所用「で」；スマホ是宾语用「を」；人は主语用「が」",
+  },
+  {
+    id: 29,
+    parts: ["海（", "）行く途中（", "）コンビニ（", "）寄りました。"],
+    blanks: ["へ", "で", "に"],
+    hint: "行く的方向用「へ」；途中は场所/时间副词用「で」；寄る的目的地用「に」",
+  },
+  {
+    id: 30,
+    parts: ["子どもの頃（", "）ピアノ（", "）習っています。"],
+    blanks: ["から", "を"],
+    hint: "从…起点开始持续用「から」；習う的宾语用「を」",
+  },
+];
+
+const QUIZ_SIZE = 10;
+
+function shuffle(arr) {
+  return [...arr].sort(() => Math.random() - 0.5);
+}
+
+function pickQuestions() {
+  return shuffle(allQuestions).slice(0, QUIZ_SIZE);
+}
+
+const HIRAGANA = [
+  "が", "を", "は", "に", "で", "の", "と", "も", "へ", "や",
+  "から", "まで", "より", "では",
+];
+
+export default function ParticleQuiz() {
+  const [questions, setQuestions] = useState([]);
+  const [current, setCurrent] = useState(0);
+  const [userAnswers, setUserAnswers] = useState({});
+  const [submitted, setSubmitted] = useState(false);
+  const [showResult, setShowResult] = useState(false);
+  const [score, setScore] = useState(0);
+  const [focusedBlank, setFocusedBlank] = useState(0);
+
+  const initQuiz = useCallback(() => {
+    const qs = pickQuestions();
+    setQuestions(qs);
+    setCurrent(0);
+    setUserAnswers({});
+    setSubmitted(false);
+    setShowResult(false);
+    setScore(0);
+    setFocusedBlank(0);
+  }, []);
+
+  useEffect(() => { initQuiz(); }, [initQuiz]);
+
+  const q = questions[current];
+
+  const handleSelect = (kana) => {
+    if (submitted || !q) return;
+    const key = `${current}-${focusedBlank}`;
+    setUserAnswers(prev => ({ ...prev, [key]: kana }));
+    if (focusedBlank < q.blanks.length - 1) setFocusedBlank(f => f + 1);
+  };
+
+  const handleSubmit = () => { if (q) setSubmitted(true); };
+
+  const handleNext = () => {
+    if (current < questions.length - 1) {
+      setCurrent(c => c + 1);
+      setFocusedBlank(0);
+      setSubmitted(false);
+    } else {
+      let correct = 0;
+      questions.forEach((q, qi) => {
+        q.blanks.forEach((ans, bi) => {
+          if (userAnswers[`${qi}-${bi}`] === ans) correct++;
+        });
+      });
+      setScore(correct);
+      setShowResult(true);
+    }
+  };
+
+  const getBlankStatus = (qi, bi) => {
+    const val = userAnswers[`${qi}-${bi}`];
+    if (!submitted) return val || "";
+    return val === questions[qi]?.blanks[bi] ? "correct" : "wrong";
+  };
+
+  const totalBlanks = questions.reduce((s, q) => s + q.blanks.length, 0);
+
+  if (!q && !showResult) return <div style={S.loading}>加载中…</div>;
+
+  if (showResult) {
+    const pct = Math.round((score / totalBlanks) * 100);
+    return (
+      <div style={S.page}>
+        <div style={S.card}>
+          <div style={S.resultEmoji}>{pct >= 80 ? "🎉" : pct >= 60 ? "😊" : "💪"}</div>
+          <div style={S.resultTitle}>测验完成！</div>
+          <div style={S.scoreBig}>
+            <span style={S.scoreNum}>{score}</span>
+            <span style={S.scoreTotal}> / {totalBlanks}</span>
+          </div>
+          <div style={S.scoreLabel}>{pct}% 正确率</div>
+          <div style={S.resultMsg}>
+            {pct >= 80 ? "太棒了！助词掌握得很好！" : pct >= 60 ? "不错！继续加油！" : "多练习，你可以的！"}
+          </div>
+          <button style={S.primaryBtn} onClick={initQuiz}>再来一组</button>
+        </div>
+      </div>
+    );
+  }
+
+  const allFilled = q.blanks.every((_, bi) => userAnswers[`${current}-${bi}`]);
+
+  return (
+    <div style={S.page}>
+      <div style={S.header}>
+        <div style={S.headerTitle}>助词填空练习</div>
+        <div style={S.progress}>{current + 1} / {questions.length}</div>
+      </div>
+
+      <div style={S.progressBarBg}>
+        <div style={{ ...S.progressBarFill, width: `${(current / questions.length) * 100}%` }} />
+      </div>
+
+      <div style={S.card}>
+        <div style={S.questionNum}>第 {current + 1} 题</div>
+
+        <div style={S.sentence}>
+          {q.parts.map((part, i) => (
+            <span key={i}>
+              <span>{part}</span>
+              {i < q.blanks.length && (
+                <span
+                  style={{
+                    ...S.blank,
+                    ...(focusedBlank === i && !submitted ? S.blankFocused : {}),
+                    ...(submitted && getBlankStatus(current, i) === "correct" ? S.blankCorrect : {}),
+                    ...(submitted && getBlankStatus(current, i) === "wrong" ? S.blankWrong : {}),
+                  }}
+                  onClick={() => !submitted && setFocusedBlank(i)}
+                >
+                  {userAnswers[`${current}-${i}`] || "　"}
+                  {submitted && getBlankStatus(current, i) === "wrong" && (
+                    <span style={S.correctAnswer}>{q.blanks[i]}</span>
+                  )}
+                </span>
+              )}
+            </span>
+          ))}
+        </div>
+
+        {q.blanks.length > 1 && !submitted && (
+          <div style={S.blankIndicators}>
+            {q.blanks.map((_, bi) => (
+              <div
+                key={bi}
+                style={{
+                  ...S.blankDot,
+                  background: focusedBlank === bi ? "#4F7FFF"
+                    : userAnswers[`${current}-${bi}`] ? "#34C759" : "#E5E5EA",
+                }}
+                onClick={() => setFocusedBlank(bi)}
+              />
+            ))}
+            <span style={S.blankLabel}>点击圆点切换填写位置</span>
+          </div>
+        )}
+
+        {submitted && (
+          <div style={S.hintBox}>
+            <span>💡 </span>{q.hint}
+          </div>
+        )}
+      </div>
+
+      {!submitted && (
+        <div style={S.keyboard}>
+          {HIRAGANA.map((k) => (
+            <button
+              key={k}
+              style={{
+                ...S.kanaBtn,
+                ...(userAnswers[`${current}-${focusedBlank}`] === k ? S.kanaBtnActive : {}),
+              }}
+              onClick={() => handleSelect(k)}
+            >
+              {k}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div style={S.actions}>
+        {!submitted ? (
+          <button
+            style={{ ...S.primaryBtn, opacity: allFilled ? 1 : 0.4 }}
+            onClick={handleSubmit}
+            disabled={!allFilled}
+          >
+            确认答案
+          </button>
+        ) : (
+          <button style={S.primaryBtn} onClick={handleNext}>
+            {current < questions.length - 1 ? "下一题 →" : "查看结果"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const S = {
+  page: {
+    minHeight: "100vh",
+    background: "#F2F2F7",
+    fontFamily: "-apple-system, 'Hiragino Sans', 'Yu Gothic', sans-serif",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    paddingBottom: 32,
+  },
+  loading: {
+    display: "flex", justifyContent: "center", alignItems: "center",
+    height: "100vh", fontSize: 18, color: "#8E8E93",
+  },
+  header: {
+    width: "100%", maxWidth: 480,
+    display: "flex", justifyContent: "space-between", alignItems: "center",
+    padding: "20px 20px 8px", boxSizing: "border-box",
+  },
+  headerTitle: { fontSize: 17, fontWeight: 700, color: "#1C1C1E" },
+  progress: { fontSize: 14, color: "#8E8E93", fontWeight: 600 },
+  progressBarBg: {
+    width: "100%", maxWidth: 480, height: 4,
+    background: "#E5E5EA", borderRadius: 2,
+    margin: "0 0 16px", padding: "0 20px",
+    boxSizing: "border-box", overflow: "hidden",
+  },
+  progressBarFill: {
+    height: "100%", background: "#4F7FFF",
+    borderRadius: 2, transition: "width 0.3s ease",
+  },
+  card: {
+    width: "100%", maxWidth: 480,
+    background: "#fff", borderRadius: 16,
+    padding: "20px 20px 24px", boxSizing: "border-box",
+    margin: "0 20px 16px",
+    boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+  },
+  questionNum: {
+    fontSize: 12, fontWeight: 600, color: "#4F7FFF",
+    letterSpacing: 0.5, marginBottom: 12,
+  },
+  sentence: {
+    fontSize: 19, lineHeight: 2.4, color: "#1C1C1E", wordBreak: "break-all",
+  },
+  blank: {
+    display: "inline-flex", alignItems: "center", justifyContent: "center",
+    minWidth: 38, height: 36,
+    background: "#F2F2F7", borderRadius: 8,
+    border: "2px solid #E5E5EA",
+    margin: "0 2px", fontSize: 17, fontWeight: 700,
+    color: "#1C1C1E", cursor: "pointer",
+    position: "relative", transition: "all 0.15s",
+    verticalAlign: "middle", padding: "0 5px",
+  },
+  blankFocused: { border: "2px solid #4F7FFF", background: "#EFF3FF" },
+  blankCorrect: { border: "2px solid #34C759", background: "#EDFAF2", color: "#34C759" },
+  blankWrong: { border: "2px solid #FF3B30", background: "#FFF0EF", color: "#FF3B30" },
+  correctAnswer: {
+    position: "absolute", bottom: -20, left: "50%",
+    transform: "translateX(-50%)",
+    fontSize: 12, color: "#34C759", fontWeight: 700, whiteSpace: "nowrap",
+  },
+  blankIndicators: {
+    display: "flex", alignItems: "center", gap: 8, marginTop: 16,
+  },
+  blankDot: {
+    width: 10, height: 10, borderRadius: 5,
+    cursor: "pointer", transition: "background 0.15s",
+  },
+  blankLabel: { fontSize: 11, color: "#8E8E93", marginLeft: 4 },
+  hintBox: {
+    marginTop: 20, padding: "10px 14px",
+    background: "#FFF9ED", borderRadius: 10,
+    fontSize: 13, color: "#6B5B00", lineHeight: 1.7,
+  },
+  keyboard: {
+    width: "100%", maxWidth: 480,
+    display: "flex", flexWrap: "wrap", gap: 8,
+    padding: "0 20px", boxSizing: "border-box",
+    marginBottom: 16, justifyContent: "center",
+  },
+  kanaBtn: {
+    padding: "10px 12px",
+    background: "#fff", border: "1.5px solid #E5E5EA",
+    borderRadius: 10, fontSize: 16, fontWeight: 600,
+    color: "#1C1C1E", cursor: "pointer",
+    minWidth: 48, textAlign: "center",
+    transition: "all 0.12s",
+  },
+  kanaBtnActive: {
+    background: "#4F7FFF", color: "#fff",
+    border: "1.5px solid #4F7FFF",
+  },
+  actions: {
+    width: "100%", maxWidth: 480,
+    padding: "0 20px", boxSizing: "border-box",
+  },
+  primaryBtn: {
+    width: "100%", padding: "15px",
+    background: "#4F7FFF", color: "#fff",
+    border: "none", borderRadius: 14,
+    fontSize: 16, fontWeight: 700,
+    cursor: "pointer", transition: "opacity 0.15s",
+  },
+  resultEmoji: { fontSize: 56, textAlign: "center", marginBottom: 12 },
+  resultTitle: {
+    fontSize: 22, fontWeight: 700, color: "#1C1C1E",
+    textAlign: "center", marginBottom: 20,
+  },
+  scoreBig: { textAlign: "center", marginBottom: 4 },
+  scoreNum: { fontSize: 56, fontWeight: 800, color: "#4F7FFF" },
+  scoreTotal: { fontSize: 24, color: "#8E8E93", fontWeight: 600 },
+  scoreLabel: {
+    textAlign: "center", fontSize: 16,
+    color: "#8E8E93", marginBottom: 16,
+  },
+  resultMsg: {
+    textAlign: "center", fontSize: 15,
+    color: "#3A3A3C", marginBottom: 24, lineHeight: 1.6,
+  },
+};
